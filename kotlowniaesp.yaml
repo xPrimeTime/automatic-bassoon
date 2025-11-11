@@ -1,0 +1,199 @@
+esphome:
+  name: kotlowniaesp
+  friendly_name: KotlowniaESP
+
+esp8266:
+  board: nodemcuv2  # Changed from esp01_1m to nodemcuv2 for NodeMCU v3
+
+# Enable logging
+logger:
+  level: DEBUG  # Set to INFO in production
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Kotlowniaesp Fallback Hotspot"
+    password: !secret fallback_password
+
+captive_portal:
+
+# One-Wire bus for Dallas temperature sensors
+one_wire:
+  - platform: gpio
+    pin: GPIO2  # D4 on NodeMCU (pin 4 in your original config)
+
+# Sensors
+sensor:
+  # Your existing Dallas temperature sensors
+  - platform: dallas_temp
+    address: 0x380000006b786628
+    name: "CWU1 UP Temperature"
+    id: temp_cwu1_up
+    update_interval: 15s
+
+  - platform: dallas_temp
+    address: 0xa9182ed446d05528
+    name: "Temperature 2"
+    id: temp2
+    update_interval: 15s
+
+  - platform: dallas_temp
+    address: 0xde489ed4466af528
+    name: "Temperature 3"
+    id: temp3
+    update_interval: 15s
+
+  - platform: dallas_temp
+    address: 0xd01861d446f36d28
+    name: "Temperature 4"
+    id: temp4
+    update_interval: 15s
+
+  - platform: dallas_temp
+    address: 0x670088d446329b28
+    name: "Temperature 5"
+    id: temp5
+    update_interval: 15s
+
+  # Import Shelly H&T temperature from Home Assistant
+  - platform: homeassistant
+    name: "Shelly Temperature"
+    id: shelly_temperature
+    entity_id: sensor.shelly_handt_temperature  # CHANGE THIS to match your Shelly sensor entity ID in HA
+    filters:
+      - heartbeat: 60s  # Update at least every 60 seconds
+    on_value:
+      then:
+        - lambda: |-
+            // Log the temperature for debugging
+            ESP_LOGD("shelly", "Temperature received: %.1f°C", x);
+
+# Number inputs for temperature thresholds (configurable from Home Assistant)
+number:
+  - platform: template
+    name: "Heating Lower Threshold"
+    id: heating_lower_threshold
+    optimistic: true
+    min_value: 0
+    max_value: 30
+    initial_value: 18.0  # Turn ON heating below this temperature
+    step: 0.5
+    unit_of_measurement: "°C"
+    mode: box
+
+  - platform: template
+    name: "Heating Upper Threshold"
+    id: heating_upper_threshold
+    optimistic: true
+    min_value: 0
+    max_value: 30
+    initial_value: 22.0  # Turn OFF heating above this temperature
+    step: 0.5
+    unit_of_measurement: "°C"
+    mode: box
+
+# GPIO Output for heating control
+switch:
+  - platform: gpio
+    pin: GPIO5  # D1 on NodeMCU - CHANGE THIS to your desired pin
+    name: "Heating Output"
+    id: heating_output
+    icon: "mdi:radiator"
+    restore_mode: RESTORE_DEFAULT_OFF  # Start in OFF state after reboot
+
+# Binary sensor to show heating status
+binary_sensor:
+  - platform: template
+    name: "Heating Active"
+    id: heating_active
+    device_class: heat
+    lambda: |-
+      return id(heating_output).state;
+
+# Climate control (Thermostat) using Shelly temperature
+climate:
+  - platform: thermostat
+    name: "Room Thermostat"
+    id: room_thermostat
+    sensor: shelly_temperature  # Use Shelly temperature as input
+
+    # Visual settings in Home Assistant
+    visual:
+      min_temperature: 10 °C
+      max_temperature: 30 °C
+      temperature_step: 0.5 °C
+
+    # Default target temperature
+    default_preset: Home
+    preset:
+      - name: Home
+        default_target_temperature_low: 20 °C
+        mode: heat
+      - name: Away
+        default_target_temperature_low: 16 °C
+        mode: heat
+      - name: Sleep
+        default_target_temperature_low: 18 °C
+        mode: heat
+
+    # Deadband configuration (hysteresis)
+    # Heating turns ON when temp < (target - 1°C)
+    # Heating turns OFF when temp > target
+    heat_deadband: 1.0 °C
+    heat_overrun: 0.0 °C
+
+    # Control the heating output
+    heat_action:
+      - switch.turn_on: heating_output
+
+    idle_action:
+      - switch.turn_off: heating_output
+
+    # Startup behavior
+    startup_delay: true
+
+    # Additional settings
+    min_heating_off_time: 120s  # Minimum OFF time to protect relay/heating element
+    min_heating_run_time: 120s  # Minimum ON time to avoid rapid cycling
+    min_idle_time: 30s
+
+# Alternative: Simple automation-based control (comment out climate section above if using this)
+# interval:
+#   - interval: 10s
+#     then:
+#       - lambda: |-
+#           float current_temp = id(shelly_temperature).state;
+#           float lower_threshold = id(heating_lower_threshold).state;
+#           float upper_threshold = id(heating_upper_threshold).state;
+#           bool heating_on = id(heating_output).state;
+#
+#           // Turn ON heating if temperature drops below lower threshold
+#           if (current_temp < lower_threshold && !heating_on) {
+#             ESP_LOGI("heating", "Temperature %.1f°C < %.1f°C - Turning ON heating",
+#                      current_temp, lower_threshold);
+#             id(heating_output).turn_on();
+#           }
+#           // Turn OFF heating if temperature rises above upper threshold
+#           else if (current_temp > upper_threshold && heating_on) {
+#             ESP_LOGI("heating", "Temperature %.1f°C > %.1f°C - Turning OFF heating",
+#                      current_temp, upper_threshold);
+#             id(heating_output).turn_off();
+#           }
+
+# Status LED (optional - uses built-in LED)
+status_led:
+  pin:
+    number: GPIO16  # D0 on NodeMCU (built-in LED)
+    inverted: true
