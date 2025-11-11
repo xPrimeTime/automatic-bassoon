@@ -67,18 +67,52 @@ sensor:
     id: temp5
     update_interval: 15s
 
-  # Import Shelly H&T temperature from Home Assistant
-  # This sensor is used for all 4 zones - change entity_id for each zone later if needed
+  # Import Shelly H&T temperatures from Home Assistant (one per zone)
+  # All currently point to the same sensor - update entity_id when you add more Shelly devices
+
   - platform: homeassistant
-    name: "Shelly Temperature"
-    id: shelly_temperature
-    entity_id: sensor.termometr_jarek_temperature  # Shelly sensor for all zones (change per zone later)
+    name: "Zone 1 Shelly Temperature"
+    id: shelly_temperature_zone1
+    entity_id: sensor.termometr_jarek_temperature  # Update this when you have Zone 1 Shelly
     filters:
       - heartbeat: 60s
     on_value:
       then:
         - lambda: |-
-            ESP_LOGD("shelly", "Temperature received: %.1f°C", x);
+            ESP_LOGD("shelly_zone1", "Zone 1 Temperature received: %.1f°C", x);
+
+  - platform: homeassistant
+    name: "Zone 2 Shelly Temperature"
+    id: shelly_temperature_zone2
+    entity_id: sensor.termometr_jarek_temperature  # Update this when you have Zone 2 Shelly
+    filters:
+      - heartbeat: 60s
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("shelly_zone2", "Zone 2 Temperature received: %.1f°C", x);
+
+  - platform: homeassistant
+    name: "Zone 3 Shelly Temperature"
+    id: shelly_temperature_zone3
+    entity_id: sensor.termometr_jarek_temperature  # Update this when you have Zone 3 Shelly
+    filters:
+      - heartbeat: 60s
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("shelly_zone3", "Zone 3 Temperature received: %.1f°C", x);
+
+  - platform: homeassistant
+    name: "Zone 4 Shelly Temperature"
+    id: shelly_temperature_zone4
+    entity_id: sensor.termometr_jarek_temperature  # Update this when you have Zone 4 Shelly
+    filters:
+      - heartbeat: 60s
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("shelly_zone4", "Zone 4 Temperature received: %.1f°C", x);
 
 # GPIO Outputs for heating control (4 zones)
 switch:
@@ -150,7 +184,7 @@ climate:
   - platform: thermostat
     name: "Zone 1 Thermostat"
     id: thermostat_zone1
-    sensor: shelly_temperature  # Change this to a different sensor ID later if needed
+    sensor: shelly_temperature_zone1  # Uses Zone 1 Shelly sensor
 
     visual:
       min_temperature: 10 °C
@@ -186,7 +220,7 @@ climate:
   - platform: thermostat
     name: "Zone 2 Thermostat"
     id: thermostat_zone2
-    sensor: shelly_temperature  # Change this to a different sensor ID later if needed
+    sensor: shelly_temperature_zone2  # Uses Zone 2 Shelly sensor
 
     visual:
       min_temperature: 10 °C
@@ -222,7 +256,7 @@ climate:
   - platform: thermostat
     name: "Zone 3 Thermostat"
     id: thermostat_zone3
-    sensor: shelly_temperature  # Change this to a different sensor ID later if needed
+    sensor: shelly_temperature_zone3  # Uses Zone 3 Shelly sensor
 
     visual:
       min_temperature: 10 °C
@@ -258,7 +292,7 @@ climate:
   - platform: thermostat
     name: "Zone 4 Thermostat"
     id: thermostat_zone4
-    sensor: shelly_temperature  # Change this to a different sensor ID later if needed
+    sensor: shelly_temperature_zone4  # Uses Zone 4 Shelly sensor
 
     visual:
       min_temperature: 10 °C
