@@ -68,74 +68,95 @@ sensor:
     update_interval: 15s
 
   # Import Shelly H&T temperature from Home Assistant
+  # This sensor is used for all 4 zones - change entity_id for each zone later if needed
   - platform: homeassistant
     name: "Shelly Temperature"
     id: shelly_temperature
-    entity_id: sensor.shelly_handt_temperature  # CHANGE THIS to match your Shelly sensor entity ID in HA
+    entity_id: sensor.termometr_jarek_temperature  # Shelly sensor for all zones (change per zone later)
     filters:
-      - heartbeat: 60s  # Update at least every 60 seconds
+      - heartbeat: 60s
     on_value:
       then:
         - lambda: |-
-            // Log the temperature for debugging
             ESP_LOGD("shelly", "Temperature received: %.1f°C", x);
 
-# Number inputs for temperature thresholds (configurable from Home Assistant)
-number:
-  - platform: template
-    name: "Heating Lower Threshold"
-    id: heating_lower_threshold
-    optimistic: true
-    min_value: 0
-    max_value: 30
-    initial_value: 18.0  # Turn ON heating below this temperature
-    step: 0.5
-    unit_of_measurement: "°C"
-    mode: box
-
-  - platform: template
-    name: "Heating Upper Threshold"
-    id: heating_upper_threshold
-    optimistic: true
-    min_value: 0
-    max_value: 30
-    initial_value: 22.0  # Turn OFF heating above this temperature
-    step: 0.5
-    unit_of_measurement: "°C"
-    mode: box
-
-# GPIO Output for heating control
+# GPIO Outputs for heating control (4 zones)
 switch:
+  # Zone 1 - Heating Output
   - platform: gpio
-    pin: GPIO5  # D1 on NodeMCU - CHANGE THIS to your desired pin
-    name: "Heating Output"
-    id: heating_output
+    pin: GPIO5  # D1 on NodeMCU
+    name: "Zone 1 Heating Output"
+    id: heating_output_zone1
     icon: "mdi:radiator"
-    restore_mode: RESTORE_DEFAULT_OFF  # Start in OFF state after reboot
+    restore_mode: RESTORE_DEFAULT_OFF
 
-# Binary sensor to show heating status
+  # Zone 2 - Heating Output
+  - platform: gpio
+    pin: GPIO14  # D5 on NodeMCU
+    name: "Zone 2 Heating Output"
+    id: heating_output_zone2
+    icon: "mdi:radiator"
+    restore_mode: RESTORE_DEFAULT_OFF
+
+  # Zone 3 - Heating Output
+  - platform: gpio
+    pin: GPIO12  # D6 on NodeMCU
+    name: "Zone 3 Heating Output"
+    id: heating_output_zone3
+    icon: "mdi:radiator"
+    restore_mode: RESTORE_DEFAULT_OFF
+
+  # Zone 4 - Heating Output
+  - platform: gpio
+    pin: GPIO13  # D7 on NodeMCU
+    name: "Zone 4 Heating Output"
+    id: heating_output_zone4
+    icon: "mdi:radiator"
+    restore_mode: RESTORE_DEFAULT_OFF
+
+# Binary sensors to show heating status for each zone
 binary_sensor:
   - platform: template
-    name: "Heating Active"
-    id: heating_active
+    name: "Zone 1 Heating Active"
+    id: heating_active_zone1
     device_class: heat
     lambda: |-
-      return id(heating_output).state;
+      return id(heating_output_zone1).state;
 
-# Climate control (Thermostat) using Shelly temperature
+  - platform: template
+    name: "Zone 2 Heating Active"
+    id: heating_active_zone2
+    device_class: heat
+    lambda: |-
+      return id(heating_output_zone2).state;
+
+  - platform: template
+    name: "Zone 3 Heating Active"
+    id: heating_active_zone3
+    device_class: heat
+    lambda: |-
+      return id(heating_output_zone3).state;
+
+  - platform: template
+    name: "Zone 4 Heating Active"
+    id: heating_active_zone4
+    device_class: heat
+    lambda: |-
+      return id(heating_output_zone4).state;
+
+# Climate control (4 independent thermostats)
 climate:
+  # Zone 1 Thermostat
   - platform: thermostat
-    name: "Room Thermostat"
-    id: room_thermostat
-    sensor: shelly_temperature  # Use Shelly temperature as input
+    name: "Zone 1 Thermostat"
+    id: thermostat_zone1
+    sensor: shelly_temperature  # Change this to a different sensor ID later if needed
 
-    # Visual settings in Home Assistant
     visual:
       min_temperature: 10 °C
       max_temperature: 30 °C
       temperature_step: 0.5 °C
 
-    # Default target temperature
     default_preset: Home
     preset:
       - name: Home
@@ -148,49 +169,126 @@ climate:
         default_target_temperature_low: 18 °C
         mode: heat
 
-    # Deadband configuration (hysteresis)
-    # Heating turns ON when temp < (target - 1°C)
-    # Heating turns OFF when temp > target
     heat_deadband: 1.0 °C
     heat_overrun: 0.0 °C
 
-    # Control the heating output
     heat_action:
-      - switch.turn_on: heating_output
-
+      - switch.turn_on: heating_output_zone1
     idle_action:
-      - switch.turn_off: heating_output
+      - switch.turn_off: heating_output_zone1
 
-    # Startup behavior
     startup_delay: true
-
-    # Additional settings
-    min_heating_off_time: 120s  # Minimum OFF time to protect relay/heating element
-    min_heating_run_time: 120s  # Minimum ON time to avoid rapid cycling
+    min_heating_off_time: 120s
+    min_heating_run_time: 120s
     min_idle_time: 30s
 
-# Alternative: Simple automation-based control (comment out climate section above if using this)
-# interval:
-#   - interval: 10s
-#     then:
-#       - lambda: |-
-#           float current_temp = id(shelly_temperature).state;
-#           float lower_threshold = id(heating_lower_threshold).state;
-#           float upper_threshold = id(heating_upper_threshold).state;
-#           bool heating_on = id(heating_output).state;
-#
-#           // Turn ON heating if temperature drops below lower threshold
-#           if (current_temp < lower_threshold && !heating_on) {
-#             ESP_LOGI("heating", "Temperature %.1f°C < %.1f°C - Turning ON heating",
-#                      current_temp, lower_threshold);
-#             id(heating_output).turn_on();
-#           }
-#           // Turn OFF heating if temperature rises above upper threshold
-#           else if (current_temp > upper_threshold && heating_on) {
-#             ESP_LOGI("heating", "Temperature %.1f°C > %.1f°C - Turning OFF heating",
-#                      current_temp, upper_threshold);
-#             id(heating_output).turn_off();
-#           }
+  # Zone 2 Thermostat
+  - platform: thermostat
+    name: "Zone 2 Thermostat"
+    id: thermostat_zone2
+    sensor: shelly_temperature  # Change this to a different sensor ID later if needed
+
+    visual:
+      min_temperature: 10 °C
+      max_temperature: 30 °C
+      temperature_step: 0.5 °C
+
+    default_preset: Home
+    preset:
+      - name: Home
+        default_target_temperature_low: 20 °C
+        mode: heat
+      - name: Away
+        default_target_temperature_low: 16 °C
+        mode: heat
+      - name: Sleep
+        default_target_temperature_low: 18 °C
+        mode: heat
+
+    heat_deadband: 1.0 °C
+    heat_overrun: 0.0 °C
+
+    heat_action:
+      - switch.turn_on: heating_output_zone2
+    idle_action:
+      - switch.turn_off: heating_output_zone2
+
+    startup_delay: true
+    min_heating_off_time: 120s
+    min_heating_run_time: 120s
+    min_idle_time: 30s
+
+  # Zone 3 Thermostat
+  - platform: thermostat
+    name: "Zone 3 Thermostat"
+    id: thermostat_zone3
+    sensor: shelly_temperature  # Change this to a different sensor ID later if needed
+
+    visual:
+      min_temperature: 10 °C
+      max_temperature: 30 °C
+      temperature_step: 0.5 °C
+
+    default_preset: Home
+    preset:
+      - name: Home
+        default_target_temperature_low: 20 °C
+        mode: heat
+      - name: Away
+        default_target_temperature_low: 16 °C
+        mode: heat
+      - name: Sleep
+        default_target_temperature_low: 18 °C
+        mode: heat
+
+    heat_deadband: 1.0 °C
+    heat_overrun: 0.0 °C
+
+    heat_action:
+      - switch.turn_on: heating_output_zone3
+    idle_action:
+      - switch.turn_off: heating_output_zone3
+
+    startup_delay: true
+    min_heating_off_time: 120s
+    min_heating_run_time: 120s
+    min_idle_time: 30s
+
+  # Zone 4 Thermostat
+  - platform: thermostat
+    name: "Zone 4 Thermostat"
+    id: thermostat_zone4
+    sensor: shelly_temperature  # Change this to a different sensor ID later if needed
+
+    visual:
+      min_temperature: 10 °C
+      max_temperature: 30 °C
+      temperature_step: 0.5 °C
+
+    default_preset: Home
+    preset:
+      - name: Home
+        default_target_temperature_low: 20 °C
+        mode: heat
+      - name: Away
+        default_target_temperature_low: 16 °C
+        mode: heat
+      - name: Sleep
+        default_target_temperature_low: 18 °C
+        mode: heat
+
+    heat_deadband: 1.0 °C
+    heat_overrun: 0.0 °C
+
+    heat_action:
+      - switch.turn_on: heating_output_zone4
+    idle_action:
+      - switch.turn_off: heating_output_zone4
+
+    startup_delay: true
+    min_heating_off_time: 120s
+    min_heating_run_time: 120s
+    min_idle_time: 30s
 
 # Status LED (optional - uses built-in LED)
 status_led:
